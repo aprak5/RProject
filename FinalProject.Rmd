@@ -1,0 +1,168 @@
+---
+title: "<b>Final Project</b>"
+author: "Amit Prakash"
+date: "5/2/2022"
+output: html_document
+---
+<!---
+<style type="text/css">
+code.r, pre{
+  font-size:7px
+}
+p, h1, h2, h3, h4, h5, h1.title {
+  font-size:8px
+}
+.author, .date {
+  font-weight:bold
+}
+</style>
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, out.width = "25%", size = '\tiny')
+```
+--->
+
+We will use the 'knitr', readr', 'utils', 'GGally', 'ggplot2', and 'dplyr' libraries for the code. Note, these are all libraries of the 'tidyverse' package, but for efficiency and storage purposes we will import the libraries separately and not import the whole 'tidyverse' package.
+
+```{r, message = FALSE, warning = FALSE}
+library('knitr')
+library('readr')
+library('utils')
+library('GGally')
+library('ggplot2')
+library('dplyr')
+```
+
+***Introduction***
+
+***Overall Goal***
+
+We will read in a data set, do some basic exploratory data analysis (EDA - numeric summaries and graphs),
+data transformations, and then fit some linear regression models. It should be fun :) You should use the different packages in tidyverse to read in, manipulate, and graph the data set.
+
+***Data set***
+
+We’ll be using a data set containing information about fish toxicity via <a href = "https://archive.ics.uci.edu/ml/datasets/QSAR+fish+toxicity"> this link for the UCI machine learning repository. </a>
+This dataset was used to develop quantitative regression QSAR models to predict acute aquatic
+toxicity towards the fish Pimephales promelas (fathead minnow) on a set of 908 chemicals. LC50
+data, which is the concentration that causes death in 50% of test fish over a test duration of 96 hours,
+was used as model response. The model comprised 6 molecular descriptors: MLOGP (molecular
+properties), CIC0 (information indices), GATS1i (2D autocorrelations), NdssC (atom-type counts),
+NdsCH ((atom-type counts), SM1_Dz (2D matrix-based descriptors).
+
+***Input File Reading***
+
+We read in the input file (qsar_fish_toxicity.csv) via the 'readr' package and 'read_delim()' method and save it as 'fishToxicityData' with variable names as follows: "CIC0", "SM1_Dz(Z)", "GATS1i", "NdssC", "NdsCH", "MLOGP", "LC50". 
+
+```{r, message = FALSE}
+fishToxicityData <- read_delim(file = "qsar_fish_toxicity.csv", delim = ";", col_names = c("CIC0", "SM1_Dz(Z)", "GATS1i", "NdssC", "NdsCH", "MLOGP", "LC50"))
+```
+
+We then use 'head()' from the 'utils' package to display a snippet of 5 rows from the data ('fishToxicityData').
+
+```{r, size = "50%"}
+head(fishToxicityData, n = 5)
+```
+
+***Exploratory Data Analysis (EDA)***
+
+Below we display a pairs plot of the variables of 'CIC0', 'MLOGP', and 'LC50' and have the different levels of 'NdssC' as the colors in the pairs plot for the fishToxicityData.
+``` {r}
+ggpairs(fishToxicityData, aes(color = as.character(NdssC)), columns = c("CIC0", "MLOGP", "LC50"))
+```
+
+We now display the summary of the variable of 'LC50' for the fishToxicityData for different interactions/combinations below of the NdsCH.
+
+
+```{r}
+options(width = 200)
+for(tibble in group_split(fishToxicityData, NdsCH, TRUE)) {
+  summaryTibble <- summary(tibble$LC50)
+  summaryTibble['Std. Dev.'] = sd(tibble$LC50)
+  summaryTibble['NdsCH Val.'] = tibble$NdsCH[1]
+  summaryTibble['Count'] = length(tibble$LC50)
+  print(summaryTibble)
+}  
+```
+
+We now display the summary of the variable of 'LC50' for the fishToxicityData for different interactions/combinations below of the NdssC.
+
+```{r}
+options(width = 200)
+for(tibble in group_split(fishToxicityData, NdssC, TRUE)) {
+  summaryTibble <- summary(tibble$LC50)
+  summaryTibble['Std. Dev.'] = sd(tibble$LC50)
+  summaryTibble['NdssC Val.'] = tibble$NdssC[1]
+  summaryTibble['Count'] = length(tibble$LC50)
+  print(summaryTibble)
+}
+```
+
+We graph three types of plots below — scatter (with a linearly fit line), histogram, and boxplot — scatter for different combinations of LC50 as response and CIC0 or MLOGP as predictor variables and all others for 'LC50', separated based on the categorical variable 'NdssC'. Based on the summaries of the response variable 'LC50' given above, we will look at 'NdssC' not 'NdsCH' for the categorical variable given the less levels (and corresponding degrees of freedom) and data distribution per level.
+
+***Scatterplots with Linearly Fitted Lines***
+
+```{r, fig.show="hold", message = FALSE, render = TRUE}
+ ggplot(data = fishToxicityData, aes(x = CIC0, y = LC50)) + 
+ geom_jitter(shape = 3, size = 0.8) + geom_smooth(method = lm) + facet_wrap(~ NdssC)
+ ggplot(data = fishToxicityData, aes(x = MLOGP, y = LC50)) + 
+ geom_jitter(shape = 3, size = 0.8) + geom_smooth(method = lm) + facet_wrap(~ NdssC)
+```
+ 
+***Histogram***
+
+```{r}
+ ggplot(data = fishToxicityData, aes(x = LC50)) + 
+ geom_histogram(bins = 50, aes(color = as.character(NdssC))) + guides(color = guide_legend("NdssC"))
+```
+ 
+***Boxplot***
+
+```{r}
+ ggplot(data = fishToxicityData, aes(x = LC50)) + 
+ geom_boxplot(aes(color = as.character(NdssC))) + guides(color = guide_legend("NdssC"))
+```
+
+We now define a function to create a binary categorical variable with either "low" or "high". 
+```{r}
+medianComparison <- function(vector) {
+  return(if_else(vector <= median(vector), "Low", "High"))
+}
+```
+
+We use our created function to create a new data frame with binary variables for each of the variables.
+```{r}
+binFishToxicityData <- as.data.frame(apply(fishToxicityData, 2, medianComparison))
+```
+
+We then make two-way contigency tables for LC50 and CIC0 then LC50 and MLOGP to show the interaction between them, and we can further show this by bar-plots on the same set of variables.
+```{r, fig.show="hold"}
+table(binFishToxicityData$LC50, binFishToxicityData$CIC0)
+table(binFishToxicityData$LC50, binFishToxicityData$MLOGP)
+ggplot(data = binFishToxicityData, aes(x = LC50, fill = CIC0)) + geom_bar(position = "dodge")
+ggplot(data = binFishToxicityData, aes(x = LC50, fill = MLOGP)) + geom_bar(position = "dodge")
+```
+
+We can then make models with different combinations of the same predictor and response variables ('CIC0', 'MLOGP', 'NdssC' and 'LC50'), below we have a cubic and three quadratic models.
+
+```{r}
+summary(lm(LC50 ~ CIC0 + MLOGP + NdssC + I(CIC0^3) + I(MLOGP^3) + I(NdssC^3) + CIC0 * MLOGP * NdssC, data = fishToxicityData))
+
+summary(lm(LC50 ~ CIC0 + MLOGP + CIC0 * MLOGP + I(CIC0^2) + I(MLOGP^2), data = fishToxicityData))
+
+summary(lm(LC50 ~ CIC0 + NdssC + CIC0 * NdssC + I(NdssC^2) + I(CIC0^2), data = fishToxicityData))
+
+summary(lm(LC50 ~ MLOGP + NdssC + NdssC * MLOGP + I(NdssC^2) + I(MLOGP^2), data = fishToxicityData))
+```
+
+We can now see how accurate the model is by plotting it. Below on the Normal Q-Q plot, the data points nearly fit the expected line, so that shows we have a fairly good fit for the data. Additionally on the Scale-Location plot, the data points are scattered nearly randomly throughout the graph staying close to the red-line (our model), which once again shows that the model is a fairly good fit for the data.
+```{r}
+plot(lm(LC50 ~ CIC0 + MLOGP + NdssC + I(CIC0^3) + I(MLOGP^3) + I(NdssC^3) + CIC0 * MLOGP * NdssC, data = fishToxicityData))
+```
+
+If we use our cubic model to predict the value of 'LC50' using the median values of 'CIC0', 'MLOGP', and 'NdssC', we get 'LC50' equals 3.904252. If we do the same with one of the quadratic models, we get 'LC50' equals 3.915431. 
+```{r}
+predict(lm(LC50 ~ CIC0 + MLOGP + NdssC + I(CIC0^3) + I(MLOGP^3) + I(NdssC^3) + CIC0 * MLOGP * NdssC, data = fishToxicityData), newdata = data.frame(CIC0 = median(fishToxicityData$CIC0), MLOGP = median(fishToxicityData$MLOGP), NdssC = median(fishToxicityData$NdssC)))
+
+predict(lm(LC50 ~ MLOGP + NdssC + NdssC * MLOGP + I(NdssC^2) + I(MLOGP^2), data = fishToxicityData), newdata = data.frame(MLOGP = median(fishToxicityData$MLOGP), NdssC = median(fishToxicityData$NdssC)))
+```
